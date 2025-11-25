@@ -3,7 +3,7 @@ import { WelcomeScreen } from './components/WelcomeScreen';
 import { FormStep } from './components/FormStep';
 import { LoadingView } from './components/LoadingView';
 import { MarkdownRenderer } from './components/MarkdownRenderer';
-import { generateEbookStructure } from './services/gemini';
+import { generateEbookStructure, generateEbookCover } from './services/gemini';
 import { AppState, EbookFormData } from './types';
 import { 
   BookType, 
@@ -14,7 +14,13 @@ import {
   Download,
   RefreshCw,
   Copy,
-  CheckCheck
+  CheckCheck,
+  Maximize2,
+  Share2,
+  FileText,
+  Type,
+  Palette,
+  X
 } from 'lucide-react';
 
 const INITIAL_FORM: EbookFormData = {
@@ -22,7 +28,9 @@ const INITIAL_FORM: EbookFormData = {
   audience: '',
   goal: '',
   tone: '',
-  differentiators: ''
+  differentiators: '',
+  depth: '50', // Default value for slider
+  coverStyle: 'Minimalista'
 };
 
 export default function App() {
@@ -30,8 +38,11 @@ export default function App() {
   const [formData, setFormData] = useState<EbookFormData>(INITIAL_FORM);
   const [currentStep, setCurrentStep] = useState(0);
   const [generatedContent, setGeneratedContent] = useState<string>("");
+  const [coverImage, setCoverImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [font, setFont] = useState<'sans' | 'serif'>('serif');
+  const [isCoverFullscreen, setIsCoverFullscreen] = useState(false);
 
   const handleStart = () => {
     setAppState(AppState.FORM);
@@ -41,41 +52,91 @@ export default function App() {
     setFormData(prev => ({ ...prev, [key]: value }));
   };
 
-  const steps = [
+  const steps: {
+    key: keyof EbookFormData;
+    title: string;
+    description: string;
+    placeholder: string;
+    icon: any;
+    inputType: 'text' | 'options' | 'slider';
+    options?: string[];
+    min?: number;
+    max?: number;
+    step?: number;
+  }[] = [
     {
-      key: 'topic' as keyof EbookFormData,
+      key: 'topic',
       title: "Tópico e Título",
       description: "Qual é o tema central do Ebook? Você já tem um título provisório ou ideia de gancho?",
       placeholder: "Ex: Produtividade para criativos. Título: 'A Arte de Fazer Menos'.",
-      icon: BookType
+      icon: BookType,
+      inputType: 'text'
     },
     {
-      key: 'audience' as keyof EbookFormData,
+      key: 'audience',
       title: "Público-Alvo e Dores",
       description: "Quem exatamente queremos atingir? Quais são os problemas específicos que eles enfrentam?",
       placeholder: "Ex: Designers freelancers que sofrem com burnout e prazos apertados.",
-      icon: Users
+      icon: Users,
+      inputType: 'text'
     },
     {
-      key: 'goal' as keyof EbookFormData,
+      key: 'goal',
       title: "Objetivo e CTA",
       description: "O objetivo é gerar leads, educar ou vender? Qual deve ser a Call to Action final?",
       placeholder: "Ex: Gerar leads qualificados. CTA: Convidar para uma consultoria gratuita.",
-      icon: Target
+      icon: Target,
+      inputType: 'text'
     },
     {
-      key: 'tone' as keyof EbookFormData,
+      key: 'tone',
       title: "Tom e Voz",
       description: "Como a sua marca se comunica? Autoritária, amiga, técnica, inspiradora?",
       placeholder: "Ex: Empático, mas direto. Como um mentor experiente conversando num café.",
-      icon: MessageCircle
+      icon: MessageCircle,
+      inputType: 'text'
     },
     {
-      key: 'differentiators' as keyof EbookFormData,
+      key: 'depth',
+      title: "Extensão Aproximada",
+      description: "Defina a meta de páginas para o material final. Isso influenciará a quantidade de capítulos planejados e a profundidade do conteúdo.",
+      icon: Maximize2,
+      inputType: 'slider',
+      min: 10,
+      max: 200,
+      step: 10,
+      placeholder: ""
+    },
+    {
+      key: 'coverStyle',
+      title: "Estilo Visual da Capa",
+      description: "Qual estética visual melhor representa a identidade do seu material?",
+      icon: Palette,
+      inputType: 'options',
+      options: [
+        'Minimalista', 
+        'Fotorealista', 
+        'Abstrato', 
+        'Geométrico', 
+        'Ilustração Digital', 
+        'Corporativo',
+        'Vintage',
+        'Aquarela',
+        'Cyberpunk',
+        '3D Render',
+        'Fantasy Art',
+        'Sci-Fi',
+        'Art Deco'
+      ],
+      placeholder: ""
+    },
+    {
+      key: 'differentiators',
       title: "Diferenciais e Histórias",
       description: "Existem dados, estudos ou histórias específicas para aumentar a credibilidade?",
       placeholder: "Ex: Quero citar o Princípio de Pareto e contar a história de como dobrei minha renda trabalhando metade do tempo.",
-      icon: Lightbulb
+      icon: Lightbulb,
+      inputType: 'text'
     }
   ];
 
@@ -96,9 +157,21 @@ export default function App() {
   const submitForm = async () => {
     setAppState(AppState.GENERATING);
     setError(null);
+    setCoverImage(null);
+    
     try {
-      const content = await generateEbookStructure(formData);
+      // Initiate both requests. We catch the image generation error individually 
+      // so it doesn't block the text generation if it fails.
+      const contentPromise = generateEbookStructure(formData);
+      const coverPromise = generateEbookCover(formData).catch(err => {
+        console.error("Failed to generate cover:", err);
+        return null;
+      });
+
+      const [content, cover] = await Promise.all([contentPromise, coverPromise]);
+
       setGeneratedContent(content);
+      setCoverImage(cover);
       setAppState(AppState.RESULT);
     } catch (e) {
       setError("Ocorreu um erro ao gerar o ebook. Por favor, verifique sua conexão e tente novamente.");
@@ -124,11 +197,42 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadPDF = () => {
+    // Native print is cleaner, higher fidelity (vectors), and more performant than html2canvas
+    const originalTitle = document.title;
+    // Set a clean filename for the PDF save dialog
+    document.title = formData.topic 
+      ? `${formData.topic.substring(0, 30).replace(/[^a-z0-9]/gi, '_')}_Ebook` 
+      : 'Book_AI_Ebook';
+      
+    window.print();
+    
+    document.title = originalTitle;
+  };
+
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Meu Ebook gerado pelo Book AI',
+          text: generatedContent,
+        });
+      } catch (err) {
+        console.error('Erro ao compartilhar ou cancelado pelo usuário', err);
+      }
+    } else {
+      // Fallback simples caso a API não seja suportada
+      alert("O compartilhamento direto não é suportado neste navegador. Utilize o botão Copiar ou Baixar.");
+    }
+  };
+
   const handleReset = () => {
     setAppState(AppState.INTRO);
     setFormData(INITIAL_FORM);
     setCurrentStep(0);
     setGeneratedContent("");
+    setCoverImage(null);
+    setIsCoverFullscreen(false);
   };
 
   // Render Logic
@@ -162,44 +266,156 @@ export default function App() {
 
   if (appState === AppState.RESULT) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col">
+      <div className="min-h-screen bg-slate-50 flex flex-col relative print:bg-white print:block">
+        {/* Fullscreen Cover Modal */}
+        {isCoverFullscreen && coverImage && (
+          <div 
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 cursor-zoom-out animate-fadeIn print:hidden"
+            onClick={() => setIsCoverFullscreen(false)}
+          >
+            <button 
+                className="absolute top-6 right-6 text-white/70 hover:text-white transition-colors bg-white/10 p-2 rounded-full hover:bg-white/20"
+                onClick={(e) => { e.stopPropagation(); setIsCoverFullscreen(false); }}
+            >
+                <X size={32} />
+            </button>
+            <img 
+                src={coverImage} 
+                alt="Capa do Ebook Fullscreen" 
+                className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl cursor-default" 
+                onClick={(e) => e.stopPropagation()} 
+            />
+          </div>
+        )}
+
         {/* Header */}
-        <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm print:hidden">
           <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
              <div className="flex items-center gap-2">
                 <BookType className="text-indigo-600" size={24} />
                 <span className="font-bold text-slate-900 text-lg">Book AI Result</span>
              </div>
              <div className="flex gap-2">
-               <button 
-                 onClick={handleDownload}
-                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-               >
-                 <Download size={16} />
-                 Baixar
-               </button>
-               <button 
-                 onClick={handleCopy}
-                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-               >
-                 {copied ? <CheckCheck size={16} className="text-green-600"/> : <Copy size={16} />}
-                 {copied ? "Copiado" : "Copiar"}
-               </button>
-               <button 
-                 onClick={handleReset}
-                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
-               >
-                 <RefreshCw size={16} />
-                 Novo Ebook
-               </button>
+               
+               {/* Share Button with Tooltip */}
+               <div className="relative group">
+                 <button 
+                   onClick={handleShare}
+                   className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                   aria-label="Compartilhar"
+                 >
+                   <Share2 size={16} />
+                   <span className="hidden sm:inline">Compartilhar</span>
+                 </button>
+                 <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-2 py-1 text-xs font-medium text-white bg-slate-800 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                   Compartilhar via apps
+                 </div>
+               </div>
+
+                {/* Font Toggle */}
+               <div className="relative group">
+                 <button 
+                   onClick={() => setFont(prev => prev === 'serif' ? 'sans' : 'serif')}
+                   className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                   aria-label="Alternar fonte"
+                 >
+                   <Type size={16} />
+                   <span className="hidden sm:inline">{font === 'serif' ? 'Serif' : 'Sans'}</span>
+                 </button>
+                 <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-2 py-1 text-xs font-medium text-white bg-slate-800 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                   Alternar fonte (Inter/Merriweather)
+                 </div>
+               </div>
+
+               {/* Download Markdown Button with Tooltip */}
+               <div className="relative group">
+                 <button 
+                   onClick={handleDownload}
+                   className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                   aria-label="Baixar arquivo Markdown"
+                 >
+                   <Download size={16} />
+                   <span className="hidden sm:inline">MD</span>
+                 </button>
+                 <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-2 py-1 text-xs font-medium text-white bg-slate-800 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                   Baixar arquivo .md
+                 </div>
+               </div>
+
+               {/* Download PDF Button with Tooltip */}
+               <div className="relative group">
+                 <button 
+                   onClick={handleDownloadPDF}
+                   className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                   aria-label="Baixar arquivo PDF"
+                 >
+                   <FileText size={16} />
+                   <span className="hidden sm:inline">PDF</span>
+                 </button>
+                 <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-2 py-1 text-xs font-medium text-white bg-slate-800 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                   Baixar arquivo .pdf
+                 </div>
+               </div>
+
+               {/* Copy Button with Tooltip */}
+               <div className="relative group">
+                 <button 
+                   onClick={handleCopy}
+                   className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                   aria-label="Copiar conteúdo"
+                 >
+                   {copied ? <CheckCheck size={16} className="text-green-600"/> : <Copy size={16} />}
+                   <span className="hidden sm:inline">{copied ? "Copiado" : "Copiar"}</span>
+                 </button>
+                 <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-2 py-1 text-xs font-medium text-white bg-slate-800 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                   Copiar para área de transferência
+                 </div>
+               </div>
+
+               {/* Reset Button with Tooltip */}
+               <div className="relative group">
+                 <button 
+                   onClick={handleReset}
+                   className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                   aria-label="Criar novo Ebook"
+                 >
+                   <RefreshCw size={16} />
+                   <span className="hidden sm:inline">Novo</span>
+                 </button>
+                 <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-2 py-1 text-xs font-medium text-white bg-slate-800 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                   Reiniciar e criar novo Ebook
+                 </div>
+               </div>
+
              </div>
           </div>
         </header>
 
         {/* Content */}
-        <main className="flex-1 max-w-4xl mx-auto w-full p-6 md:p-12">
-          <div className="bg-white rounded-2xl shadow-xl p-8 md:p-16 min-h-[60vh] border border-slate-100">
-            <MarkdownRenderer content={generatedContent} />
+        <main className="flex-1 max-w-4xl mx-auto w-full p-6 md:p-12 print:p-0 print:max-w-none">
+          <div id="ebook-content" className="bg-white rounded-2xl shadow-xl p-8 md:p-16 min-h-[60vh] border border-slate-100 print:shadow-none print:border-none print:m-0">
+            {coverImage && (
+              <div className="flex justify-center mb-12">
+                <div 
+                    className="relative group cursor-zoom-in inline-block"
+                    onClick={() => setIsCoverFullscreen(true)}
+                >
+                    <div className="p-2 bg-white rounded shadow-sm border border-slate-100 transition-transform group-hover:scale-[1.02] duration-300 print:shadow-none print:border-none">
+                      <img 
+                        src={coverImage} 
+                        alt="Capa do Ebook Gerada por IA" 
+                        className="w-full max-w-[280px] md:max-w-[320px] rounded shadow-xl object-cover aspect-[3/4] print:shadow-none"
+                      />
+                    </div>
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none print:hidden">
+                        <div className="bg-black/50 text-white p-3 rounded-full backdrop-blur-md shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-all">
+                            <Maximize2 size={24} />
+                        </div>
+                    </div>
+                </div>
+              </div>
+            )}
+            <MarkdownRenderer content={generatedContent} font={font} />
           </div>
         </main>
       </div>
@@ -231,6 +447,11 @@ export default function App() {
         placeholder={currentStepData.placeholder}
         value={formData[currentStepData.key]}
         onChange={(val) => updateForm(currentStepData.key, val)}
+        options={currentStepData.options} 
+        inputType={currentStepData.inputType}
+        min={currentStepData.min}
+        max={currentStepData.max}
+        step={currentStepData.step}
         isLast={currentStep === steps.length - 1}
         onNext={handleNext}
         onBack={currentStep > 0 ? handleBack : undefined}

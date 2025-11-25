@@ -4,6 +4,8 @@ export interface EbookFormData {
   goal: string;
   tone: string;
   differentiators: string;
+  depth: string;
+  coverStyle: string;
 }
 
 export enum AppState {

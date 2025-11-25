@@ -2,11 +2,15 @@ import React from 'react';
 
 interface MarkdownRendererProps {
   content: string;
+  font?: 'sans' | 'serif';
 }
 
-export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
+export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, font = 'serif' }) => {
   // Simple formatting logic to avoid heavy dependencies
   const paragraphs = content.split('\n');
+  
+  // Define font class for paragraphs: 'serif' uses Merriweather (defined in index.html styles), 'font-sans' uses Inter (Tailwind default)
+  const paragraphClass = font === 'serif' ? 'serif' : 'font-sans';
 
   return (
     <div className="space-y-4 text-slate-700 leading-relaxed">
@@ -30,7 +34,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
           return (
             <div key={index} className="flex items-start ml-4">
               <span className="mr-2 text-indigo-500">•</span>
-              <span>{trimmed.replace(/^[-*]\s*/, '').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</span>
+              <span className={paragraphClass}>{trimmed.replace(/^[-*]\s*/, '').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</span>
             </div>
           );
         }
@@ -40,7 +44,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
              return (
             <div key={index} className="flex items-start ml-4">
               <span className="mr-2 text-indigo-500 font-semibold">{trimmed.split('.')[0]}.</span>
-              <span>{trimmed.replace(/^\d+\.\s*/, '').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</span>
+              <span className={paragraphClass}>{trimmed.replace(/^\d+\.\s*/, '').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</span>
             </div>
           );
         }
@@ -56,7 +60,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
             });
         };
 
-        return <p key={index} className="text-base md:text-lg serif">{parseBold(trimmed)}</p>;
+        return <p key={index} className={`text-base md:text-lg ${paragraphClass}`}>{parseBold(trimmed)}</p>;
       })}
     </div>
   );

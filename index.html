@@ -27,6 +27,22 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #94a3b8;
       }
+
+      @media print {
+        @page {
+          margin: 1.5cm;
+          size: auto;
+        }
+        body {
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+          background-color: white !important;
+        }
+        /* Hide scrollbars in print */
+        ::-webkit-scrollbar {
+          display: none;
+        }
+      }
     </style>
   <script type="importmap">
 {
