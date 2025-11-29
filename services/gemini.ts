@@ -23,7 +23,10 @@ const STYLE_MAP: Record<string, string> = {
   '3D Render': '3D render, claymorphism, high quality 3d icons, soft lighting',
   'Fantasy Art': 'epic fantasy art, magical, ethereal, highly detailed, digital painting, rpg style',
   'Sci-Fi': 'sci-fi concept art, futuristic, technological, space age, neon, advanced',
-  'Art Deco': 'art deco style, ornamental, geometric, vintage luxury, gold and black, 1920s aesthetic'
+  'Art Deco': 'art deco style, ornamental, geometric, vintage luxury, gold and black, 1920s aesthetic',
+  'Pop Art': 'pop art style, roy lichtenstein, bold colors, comic dots, artistic',
+  'Noir': 'film noir, black and white, dramatic shadows, cinematic, mysterious',
+  'Isométrico': 'isometric 3d illustration, orthographic view, clean, detailed, structured'
 };
 
 /**
@@ -88,14 +91,13 @@ export const generateEbookStructure = async (data: EbookFormData): Promise<strin
        - O usuário definiu uma META DE PÁGINAS (${data.depth}). Use essa meta para definir a quantidade de capítulos (ex: livros longos precisam de mais capítulos) e a densidade.
        - Para CADA capítulo no outline, siga estritamente este formato:
          * **Título do Capítulo** (com estimativa de palavras/páginas)
-         * **Resumo do Capítulo:** Escreva um parágrafo conciso destacando o principal takeaway (lição principal) e a transformação que este capítulo gera.
-         * **Tópicos Chave:** Liste 3-4 bullet points detalhando os conceitos, histórias ou ferramentas abordadas.
+         * **Resumo do Capítulo:** Escreva um parágrafo conciso destacando o principal takeaway (lição principal).
+         * **Tópicos Chave:** Liste 3-4 bullet points detalhando os conceitos.
+         * [ILLUSTRATION_PROMPT: Escreva aqui uma descrição visual rica para uma imagem que ilustre este capítulo, baseada no resumo e tópicos. A descrição deve solicitar o estilo artístico: "${selectedStyleDescription}" e ser em INGLÊS.]
     5. O Capítulo 1 Completo:
        - INICIE o capítulo com o título formatado como H2 (## Título do Capítulo).
-       - IMEDIATAMENTE APÓS O TÍTULO (antes do texto), gere uma tag especial para ilustração no seguinte formato exato:
-         [ILLUSTRATION_PROMPT: Escreva aqui uma descrição visual rica e detalhada para uma imagem que ilustre o conceito central deste capítulo. A descrição deve solicitar o estilo artístico: "${selectedStyleDescription}". A descrição deve ser em inglês para melhor geração.]
        - O conteúdo deve ser escrito com a voz e tom definidos, altamente concreto e guiado por narrativa.
-       - DENSIDADE: Escreva o capítulo com profundidade suficiente para justificar a meta de páginas total. Se o usuário pediu 100+ páginas, o capítulo deve ser extenso, detalhado e rico, não superficial.
+       - DENSIDADE: Escreva o capítulo com profundidade suficiente para justificar a meta de páginas total.
   `;
 
   const userPrompt = `
@@ -111,6 +113,7 @@ export const generateEbookStructure = async (data: EbookFormData): Promise<strin
     
     IMPORTANTE: O usuário definiu uma meta de ${data.depth} páginas. 
     Adapte a estrutura do "Outline Detalhado" (quantidade de capítulos) e a densidade do texto para que seja realista atingir esse tamanho no livro final.
+    Não esqueça de incluir a tag [ILLUSTRATION_PROMPT: ...] para CADA capítulo no outline.
   `;
 
   try {
@@ -129,26 +132,39 @@ export const generateEbookStructure = async (data: EbookFormData): Promise<strin
 
     let generatedText = response.text || "Não foi possível gerar o conteúdo. Tente novamente.";
 
-    // 2. Parse text for the Illustration Prompt tag
+    // 2. Find all Illustration Prompt tags globally
     // Looking for [ILLUSTRATION_PROMPT: ...]
-    const illustrationMatch = generatedText.match(/\[ILLUSTRATION_PROMPT:\s*(.*?)\]/);
+    const regex = /\[ILLUSTRATION_PROMPT:\s*(.*?)\]/g;
+    const matches = [...generatedText.matchAll(regex)];
 
-    if (illustrationMatch) {
-      const prompt = illustrationMatch[1];
-      console.log("Generating chapter illustration with prompt:", prompt);
+    if (matches.length > 0) {
+      console.log(`Found ${matches.length} illustration prompts. Generating images...`);
       
-      // 3. Generate the Image
-      // Using 16:9 for chapter headers as it looks better inline with text
-      const chapterImage = await generateImageFromPrompt(prompt, "16:9");
+      // 3. Generate Images in Parallel
+      // We map matches to promises that return { originalTag, imageUrl }
+      const imagePromises = matches.map(async (match) => {
+        const fullTag = match[0];
+        const prompt = match[1];
+        
+        // Using 16:9 for chapter/section headers
+        const imageUrl = await generateImageFromPrompt(prompt, "16:9");
+        return { fullTag, imageUrl };
+      });
 
-      // 4. Replace the tag with the Markdown Image or remove it if failed
-      if (chapterImage) {
-        generatedText = generatedText.replace(
-          illustrationMatch[0], 
-          `\n\n![Ilustração do Capítulo](${chapterImage})\n\n`
-        );
-      } else {
-        generatedText = generatedText.replace(illustrationMatch[0], '');
+      const generatedImages = await Promise.all(imagePromises);
+
+      // 4. Replace tags in the text
+      for (const item of generatedImages) {
+        if (item.imageUrl) {
+          // Replace the prompt tag with the markdown image
+          generatedText = generatedText.replace(
+            item.fullTag, 
+            `\n\n![Ilustração do Capítulo](${item.imageUrl})\n\n`
+          );
+        } else {
+          // If generation failed, just remove the tag
+          generatedText = generatedText.replace(item.fullTag, '');
+        }
       }
     }
 

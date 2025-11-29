@@ -33,6 +33,25 @@ const INITIAL_FORM: EbookFormData = {
   coverStyle: 'Minimalista'
 };
 
+const COVER_STYLE_TOOLTIPS: Record<string, string> = {
+  'Minimalista': 'Design limpo, muito espaço em branco, foco na tipografia. Passa sofisticação e clareza.',
+  'Fotorealista': 'Uso de imagens que parecem fotografias reais de alta qualidade. Traz credibilidade e realismo.',
+  'Abstrato': 'Formas, cores e padrões não representacionais. Estimula a imaginação e curiosidade.',
+  'Geométrico': 'Uso forte de linhas, formas geométricas e estruturas. Passa organização e modernidade.',
+  'Ilustração Digital': 'Arte desenhada digitalmente, cores vibrantes. Ótimo para guias práticos e criativos.',
+  'Corporativo': 'Visual sério, cores sóbrias (azul, cinza), foco em negócios e profissionalismo.',
+  'Vintage': 'Estética retrô, texturas de papel envelhecido, fontes clássicas. Nostalgia e tradição.',
+  'Aquarela': 'Pintura suave, cores pastel, artístico e delicado. Bom para temas de bem-estar ou arte.',
+  'Cyberpunk': 'Futurista, neon, contrastes fortes, tecnologia avançada. Para temas de inovação ou ficção.',
+  '3D Render': 'Elementos tridimensionais suaves, estilo "clay" (massinha) ou realista. Muito moderno e tech.',
+  'Fantasy Art': 'Épico, mágico, detalhado. Ideal para ficção, RPG ou narrativas de aventura.',
+  'Sci-Fi': 'Espacial, tecnológico, futurista. Para ficção científica ou tecnologia avançada.',
+  'Art Deco': 'Luxuoso, ornamentado, geométrico, anos 20. Elegância clássica e dourada.',
+  'Pop Art': 'Estilo vibrante com cores fortes e estética de quadrinhos retrô.',
+  'Noir': 'Elegância dramática em preto e branco com jogos de luz e sombra.',
+  'Isométrico': 'Representação 3D em perspectiva fixa, ideal para explicar sistemas e estruturas.'
+};
+
 export default function App() {
   const [appState, setAppState] = useState<AppState>(AppState.INTRO);
   const [formData, setFormData] = useState<EbookFormData>(INITIAL_FORM);
@@ -63,6 +82,7 @@ export default function App() {
     min?: number;
     max?: number;
     step?: number;
+    optionTooltips?: Record<string, string>;
   }[] = [
     {
       key: 'topic',
@@ -126,15 +146,19 @@ export default function App() {
         '3D Render',
         'Fantasy Art',
         'Sci-Fi',
-        'Art Deco'
+        'Art Deco',
+        'Pop Art',
+        'Noir',
+        'Isométrico'
       ],
-      placeholder: ""
+      placeholder: "",
+      optionTooltips: COVER_STYLE_TOOLTIPS
     },
     {
       key: 'differentiators',
-      title: "Diferenciais e Histórias",
-      description: "Existem dados, estudos ou histórias específicas para aumentar a credibilidade?",
-      placeholder: "Ex: Quero citar o Princípio de Pareto e contar a história de como dobrei minha renda trabalhando metade do tempo.",
+      title: "Diferenciais e Histórias (O segredo do sucesso)",
+      description: "Para tornar seu Ebook memorável (Sticky), precisamos de credibilidade e emoção. Você tem algum estudo de caso real, uma estatística surpreendente do setor ou uma história pessoal de fracasso/superação para ilustrar o ponto?",
+      placeholder: "Ex: 'Vou contar como fui de R$0 a R$10k em 30 dias usando o método X', 'O erro que custou meu primeiro negócio', 'Dados exclusivos da pesquisa 2024' ou 'O segredo que a indústria não conta'. Histórias vulneráveis conectam mais!",
       icon: Lightbulb,
       inputType: 'text'
     }
@@ -455,6 +479,7 @@ export default function App() {
         isLast={currentStep === steps.length - 1}
         onNext={handleNext}
         onBack={currentStep > 0 ? handleBack : undefined}
+        optionTooltips={currentStepData.optionTooltips}
       />
     </div>
   );
